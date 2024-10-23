@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useEffect } from 'react';
-import { Button, SafeAreaView, StyleSheet, TextInput } from 'react-native';
+import { Button, SafeAreaView, StyleSheet, TextInput, Alert } from 'react-native';
 import Toast from 'react-native-root-toast';
+import * as LocalAuthentication from 'expo-local-authentication';
 
 const TextInputComponent = () => {
   const [number, onChangeNumber] = React.useState('');
@@ -13,7 +14,6 @@ const TextInputComponent = () => {
         onChangeNumber(value);
       }
     } catch (e) {
-      // loading error
       console.log('Error loading data', e);
     }
   };
@@ -24,7 +24,6 @@ const TextInputComponent = () => {
       Toast.show('Daily goal saved!');
       console.log('Data saved');
     } catch (e) {
-      // saving error
       console.log('Error saving data', e);
       Toast.show('Error saving data');
     }
@@ -36,13 +35,39 @@ const TextInputComponent = () => {
 
   const handleTextChange = (value: string) => {
     onChangeNumber(value);
-    // storeData(value);
+  };
+
+  const handleSaveGoal = async () => {
+    const hasHardware = await LocalAuthentication.hasHardwareAsync();
+    const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+
+    if (!hasHardware) {
+      Alert.alert('Biometric authentication not supported');
+      return;
+    }
+
+    if (!isEnrolled) {
+      Alert.alert('No biometrics enrolled on this device');
+      return;
+    }
+
+    const result = await LocalAuthentication.authenticateAsync({
+      promptMessage: 'Authenticate to save your goal',
+      fallbackLabel: 'Use Passcode',
+      cancelLabel: 'Cancel',
+    });
+
+    if (result.success) {
+      await storeData(number);
+    } else {
+      Alert.alert('Authentication failed');
+    }
   };
 
   return (
     <SafeAreaView>
       <TextInput style={styles.input} onChangeText={handleTextChange} value={number} placeholder="Enter daily goal" keyboardType="numeric" />
-      <Button title="Save goal" onPress={() => storeData(number)} />
+      <Button title="Save goal" onPress={handleSaveGoal} />
     </SafeAreaView>
   );
 };
