@@ -1,4 +1,4 @@
-import { StyleSheet, Platform, View, Button, Text } from 'react-native';
+import { StyleSheet, View, Button, Text } from 'react-native';
 import { Image } from 'expo-image';
 import { HelloWave } from '@/components/HelloWave';
 import ParallaxScrollView from '@/components/ParallaxScrollView';
@@ -11,6 +11,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import React from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Location from 'expo-location';
+
 export default function HomeScreen() {
   const [pixelatedImageUri, setPixelatedImageUri] = useState<string | null>(null);
   const [pixelValue, setPixelValue] = useState(17);
@@ -19,14 +20,15 @@ export default function HomeScreen() {
   const [currentStepCount, setCurrentStepCount] = useState(0);
   const [number, onChangeNumber] = React.useState('');
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [locationErrorMsg, setLocationErrorMsg] = useState<string | null>(null);
+  const [address, setAddress] = useState<string | null>(null); // State for address
 
-  // pixelate image using ImageManipulator from expo
+  // Pixelate image using ImageManipulator from expo
   const pixelateImage = async (value: number) => {
     try {
       const manipResult = await ImageManipulator.manipulateAsync(
         'https://images.pexels.com/photos/978629/pexels-photo-978629.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-        [{ resize: { width: value, height: value } }], // Resize to 16x16 pixels to pixelate
+        [{ resize: { width: value, height: value } }], // Resize to pixelate
         { compress: 1, format: ImageManipulator.SaveFormat.PNG }
       );
       setPixelatedImageUri(manipResult.uri); // Save the pixelated image URI to state
@@ -41,26 +43,32 @@ export default function HomeScreen() {
     }
     setPixelValue((prevValue) => prevValue + 50); // Increment the current pixel value by 50
   };
-  // Download the image use expo-file-system
 
+  // Get location and address
   useEffect(() => {
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        setErrorMsg('Permission to access location was denied');
+        setLocationErrorMsg('Permission to access location was denied');
         return;
       }
 
-      let location = await Location.getCurrentPositionAsync({});
-      setLocation(location);
+      let loc = await Location.getCurrentPositionAsync({});
+      setLocation(loc);
+
+      // Reverse geocode to get address from location coordinates
+      const addressResults = await Location.reverseGeocodeAsync({
+        latitude: loc.coords.latitude,
+        longitude: loc.coords.longitude,
+      });
+
+      if (addressResults.length > 0) {
+        const { city, street, region } = addressResults[0]; // Extract address components
+        setAddress(`${street}, ${city}, ${region}`);
+      }
     })();
   }, []);
-  let text = 'Waiting..';
-  if (errorMsg) {
-    text = errorMsg;
-  } else if (location) {
-    text = JSON.stringify(location);
-  }
+
   const subscribe = async () => {
     const isAvailable = await Pedometer.isAvailableAsync();
     setIsPedometerAvailable(String(isAvailable));
@@ -68,7 +76,7 @@ export default function HomeScreen() {
     if (isAvailable) {
       // Watch real-time step count updates
       return Pedometer.watchStepCount((result) => {
-        setCurrentStepCount(result.steps); // Set the current step count (since the subscription started)
+        setCurrentStepCount(result.steps); // Set the current step count
         setTodayStepCount((prevStepCount) => prevStepCount + result.steps); // Add to today's total step count
       });
     }
@@ -89,7 +97,7 @@ export default function HomeScreen() {
         onChangeNumber(value);
       }
     } catch (e) {
-      // loading error
+      // Loading error
       console.log('Error loading data', e);
     }
   };
@@ -103,8 +111,6 @@ export default function HomeScreen() {
 
   useEffect(() => {
     pixelateImage(pixelValue); // Pixelate the image when the component mounts
-    console.log('pixelValue:', pixelValue);
-    // loadData();
   }, [pixelValue]);
 
   useFocusEffect(
@@ -121,9 +127,8 @@ export default function HomeScreen() {
       </ThemedView>
       <View>
         <Text>Steps taken today: {todayStepCount}</Text>
-        {/* Todays goal, set in the settings page */}
-        <Text>Todays goal: {number} </Text>
-        <Text>{text}</Text>
+        <Text>Today's goal: {number} </Text>
+        <Text>Location: {address ? address : locationErrorMsg || 'Loading location...'}</Text>
       </View>
       <View>
         {pixelatedImageUri ? (
@@ -151,10 +156,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
   },
   reactLogo: {
     height: 178,
